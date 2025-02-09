@@ -1,0 +1,19 @@
+{
+    "name": "ping-monitor",
+    "version": "1.0.0",
+    "description": "PingMonitor - 网络监控工具",
+    "scripts": {
+      "start": "node src/app.js",
+      "dev": "nodemon src/app.js",
+      "build": "webpack --mode production"
+    },
+    "dependencies": {
+      "express": "^4.18.2"
+    },
+    "devDependencies": {
+      "nodemon": "^3.0.1",
+      "webpack": "^5.82.1",
+      "webpack-cli": "^5.1.4"
+    }
+  }
+  

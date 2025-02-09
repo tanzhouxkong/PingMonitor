@@ -1,0 +1,42 @@
+/* 自定义样式 */
+#latencyTableBody tr:nth-child(even) {
+    background-color: #f9fafb;
+  }
+  
+  #latencyTableBody tr:hover {
+    background-color: #f3f4f6;
+  }
+  
+  #latencyTable {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  
+  #latencyTable th,
+  #latencyTable td {
+    padding: 8px;
+    text-align: left;
+  }
+  
+  #latencyTable th {
+    background-color: #f3f4f6;
+    font-weight: 600;
+  }
+  #latencyTableContainer {
+    max-height: 400px; 
+    overflow-y: auto;
+  }
+  /* src/styles.css */
+#latencyTableContainer {
+    max-height: 400px !important; /* 使用!important确保覆盖 */
+    overflow-y: block;
+    display: block;
+  }
+  
+  #latencyTable th {
+    position: sticky;
+    top: 0;
+    background-color: #f9fafb;
+    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); /* 添加阴影分隔 */
+  }  
+  
