@@ -1,6 +1,5 @@
 
 
-以下是美化后的 GitHub 友好版部署说明，使用 Markdown 格式并增加可视化元素：
 
 ```markdown
 # 🚀 PingMonitor 部署指南
