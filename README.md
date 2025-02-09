@@ -1,15 +1,16 @@
-部署说明
+#部署说明#
 Vercel：
 
-将代码推送到 GitHub/GitLab。
-在 Vercel 中导入项目，配置构建命令为 npm run build。
-部署即可。
-Zeabur：
+·将代码推送到 GitHub/GitLab。
+·在 Vercel 中导入项目，配置构建命令为 npm run build。
+·部署即可。
+·Zeabur：
 
-将代码推送到 GitHub/GitLab。
-在 Zeabur 中导入项目，配置启动命令为 npm run start。
-部署即可。
-GitPod：
+#将代码推送到 GitHub/GitLab。#
+-在 Zeabur 中导入项目，配置启动命令为 npm run start。
+-部署即可。
+
+-GitPod：
 
 将代码推送到 GitHub/GitLab。
 使用 GitPod 打开项目，自动安装依赖并启动服务。
