@@ -1,7 +1,7 @@
 class PingMonitor {
   constructor() {
     this.version = "1.0.0"; // 当前版本
-    this.githubRepo = "https://api.github.com/repos/yourusername/yourrepo/releases/latest"; // GitHub API
+    this.githubRepo = "https://api.github.com/repos/tanzhouxkong/PingMonitor/releases/latest"; // GitHub API
     this.sites = this.loadSitesFromStorage();
     this.chartInstance = null;
     this.chartType = "line";
