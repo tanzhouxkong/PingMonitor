@@ -1,7 +1,10 @@
 {
-    "build": {
-      "command": "npm run build",
-      "output": "public"
-    }
+    "version": 2,
+    "builds": [
+      {
+        "src": "ppublicindex.html", 
+        "use": "@vercel/static"
+      }
+    ]
   }
   
