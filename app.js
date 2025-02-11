@@ -1,447 +1,244 @@
-class PingMonitor {
-  constructor() {
-    this.version = "1.0.0"; // 当前版本
-    this.githubRepo = "https://api.github.com/repos/tanzhouxkong/PingMonitor/releases/latest"; // GitHub API
-    this.sites = this.loadSitesFromStorage();
-    this.chartInstance = null;
-    this.chartType = "line";
-    this.testingActive = true;
-    this.init();
-  }
+const { createApp, ref, computed, onMounted } = Vue;
 
-  // 初始化应用
-  init() {
-    this.setupEventListeners();
-    this.renderSiteList();
-    this.setupChart();
-    this.startTestingLoop();
-    this.checkForUpdates();
-  }
+createApp({
+    setup() {
+        // 数据
+        const darkMode = ref(localStorage.getItem('darkMode') === 'true' || false);
+        const sites = ref(JSON.parse(localStorage.getItem('ping-sites')) || []);
+        const newSiteName = ref('');
+        const newSiteUrl = ref('');
+        const chartType = ref('line');
+        let chartInstance = null;
+        const isEditModalOpen = ref(false);
+        const editingSiteIndex = ref(null);
 
-  // 事件监听设置
-  setupEventListeners() {
-    document.getElementById("addSiteBtn").addEventListener("click", () => this.handleAddSite());
-    document.getElementById("exportBtn").addEventListener("click", () => this.exportConfig());
-    document.getElementById("importFile").addEventListener("change", (e) => this.handleFileImport(e));
-    document.getElementById("toggleChartBtn").addEventListener("click", () => this.toggleChartType());
-    document.getElementById("toggleDetailsBtn").addEventListener("click", () => this.toggleDetails());
-    document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
-  }
+        // 颜色列表（用于区分不同网站）
+        const colorList = [
+            '#3b82f6', // 蓝色
+            '#ef4444', // 红色
+            '#10b981', // 绿色
+            '#f59e0b', // 橙色
+            '#8b5cf6', // 紫色
+            '#ec4899', // 粉色
+            '#14b8a6', // 青色
+            '#f97316', // 橙色
+            '#6366f1', // 靛蓝
+            '#d946ef'  // 紫红
+        ];
 
-  // 数据加载/保存
-  loadSitesFromStorage() {
-    try {
-      return JSON.parse(localStorage.getItem("ping-sites")) || [];
-    } catch (error) {
-      console.error("无法读取本地存储:", error);
-      return [];
+        // 计算属性
+        const onlineCount = computed(() => sites.value.filter(site => site.status === 'online').length);
+        const offlineCount = computed(() => sites.value.filter(site => site.status === 'offline').length);
+        const avgLatency = computed(() => {
+            const latencies = sites.value
+                .filter(site => site.status === 'online')
+                .flatMap(site => site.history)
+                .filter(record => record.latency !== null)
+                .map(record => record.latency);
+            return latencies.length > 0 ? Math.round(latencies.reduce((a, b) => a + b, 0) / latencies.length) : '-';
+        });
+        const latencyRecords = computed(() => sites.value
+            .flatMap(site => site.history.map(record => ({
+                name: site.name,
+                timestamp: record.timestamp,
+                latency: record.latency,
+                color: site.color // 添加颜色字段
+            })))
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+        );
+
+        // 深色模式切换
+        const toggleDarkMode = () => {
+            darkMode.value = !darkMode.value;
+            localStorage.setItem('darkMode', darkMode.value);
+            document.documentElement.classList.toggle('dark', darkMode.value);
+        };
+
+        // 自动补全 URL 协议
+        const normalizeUrl = (url) => {
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                return `https://${url}`; // 默认补全 https://
+            }
+            return url;
+        };
+
+        // 添加站点
+        const addSite = () => {
+            if (!newSiteName.value.trim() || !newSiteUrl.value.trim()) return;
+
+            const url = normalizeUrl(newSiteUrl.value.trim());
+            const color = colorList[sites.value.length % colorList.length]; // 分配颜色
+
+            const newSite = {
+                name: newSiteName.value.trim(),
+                url: url,
+                status: 'unknown',
+                history: [],
+                color: color
+            };
+            sites.value.push(newSite);
+            newSiteName.value = '';
+            newSiteUrl.value = '';
+            saveSites();
+            testSite(newSite);
+        };
+
+        // 删除站点
+        const deleteSite = (index) => {
+            sites.value.splice(index, 1);
+            saveSites();
+        };
+
+        // 打开编辑窗口
+        const openEditModal = (index) => {
+            editingSiteIndex.value = index;
+            const site = sites.value[index];
+            newSiteName.value = site.name;
+            newSiteUrl.value = site.url;
+            isEditModalOpen.value = true;
+        };
+
+        // 保存编辑
+        const saveEdit = () => {
+            const site = sites.value[editingSiteIndex.value];
+            site.name = newSiteName.value.trim();
+            site.url = normalizeUrl(newSiteUrl.value.trim());
+            newSiteName.value = '';
+            newSiteUrl.value = '';
+            isEditModalOpen.value = false;
+            saveSites();
+            testSite(site); // 重新测试站点
+        };
+
+        // 测试单个站点
+        const testSite = async (site) => {
+            try {
+                const startTime = Date.now();
+                const response = await fetch(site.url, { method: 'HEAD', mode: 'no-cors', cache: 'no-cache' });
+                const latency = Date.now() - startTime;
+                site.status = 'online';
+                site.history.push({ timestamp: new Date().toISOString(), latency });
+            } catch {
+                site.status = 'offline';
+                site.history.push({ timestamp: new Date().toISOString(), latency: null });
+            }
+            saveSites();
+            updateChart();
+        };
+
+        // 测试所有站点
+        const testAllSites = async () => {
+            for (const site of sites.value) {
+                await testSite(site);
+            }
+        };
+
+        // 初始化图表
+        const setupChart = () => {
+            const ctx = document.getElementById('latencyChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: chartType.value,
+                data: {
+                    labels: Array.from({ length: 20 }, (_, i) => i + 1),
+                    datasets: sites.value.map((site, index) => ({
+                        label: site.name,
+                        data: Array(20).fill(null),
+                        borderColor: site.color, // 使用站点颜色
+                        backgroundColor: `${site.color}20`, // 使用站点颜色
+                        fill: false,
+                        tension: 0.3
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: { beginAtZero: true, title: { display: true, text: '延迟 (ms)' } },
+                        x: { title: { display: true, text: '时间 (最近测试)' } }
+                    }
+                }
+            });
+        };
+
+        // 更新图表
+        const updateChart = () => {
+            const labels = Array.from({ length: 20 }, (_, i) => i + 1);
+            chartInstance.data.datasets = sites.value.map(site => ({
+                label: site.name,
+                data: site.history.slice(-20).map(record => record.latency),
+                borderColor: site.color, // 使用站点颜色
+                backgroundColor: `${site.color}20`, // 使用站点颜色
+                fill: false,
+                tension: 0.3
+            }));
+            chartInstance.update();
+        };
+
+        // 切换图表类型
+        const toggleChartType = () => {
+            chartType.value = chartType.value === 'line' ? 'bar' : 'line';
+            chartInstance.destroy();
+            setupChart();
+        };
+
+        // 导出配置
+        const exportConfig = () => {
+            const data = JSON.stringify(sites.value, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'pingmonitor-config.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        };
+
+        // 导入配置
+        const handleFileImport = (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    sites.value = data;
+                    saveSites();
+                    testAllSites();
+                } catch (error) {
+                    alert('导入失败：文件格式错误');
+                }
+            };
+            reader.readAsText(file);
+        };
+
+        // 保存站点
+        const saveSites = () => {
+            localStorage.setItem('ping-sites', JSON.stringify(sites.value));
+        };
+
+        // 启动测试循环
+        const startTestingLoop = () => {
+            setInterval(testAllSites, 15000); // 每 15 秒测试一次
+        };
+
+        // 格式化时间
+        const formatTime = (timestamp) => new Date(timestamp).toLocaleTimeString();
+
+        // 初始化
+        onMounted(() => {
+            document.documentElement.classList.toggle('dark', darkMode.value);
+            setupChart();
+            startTestingLoop();
+            if (sites.value.length > 0) testAllSites();
+        });
+
+        return {
+            darkMode, sites, newSiteName, newSiteUrl, chartType, isEditModalOpen, editingSiteIndex,
+            onlineCount, offlineCount, avgLatency, latencyRecords,
+            toggleDarkMode, addSite, deleteSite, openEditModal, saveEdit, testAllSites,
+            setupChart, updateChart, toggleChartType, exportConfig,
+            handleFileImport, formatTime
+        };
     }
-  }
-
-  saveToStorage() {
-    try {
-      const saveData = this.sites.map((site) => ({
-        name: site.name,
-        url: site.url,
-        history: site.history.slice(-20),
-        status: site.status,
-      }));
-      localStorage.setItem("ping-sites", JSON.stringify(saveData));
-    } catch (error) {
-      console.error("保存数据失败:", error);
-    }
-  }
-
-  // 添加站点
-  async handleAddSite() {
-    const nameInput = document.getElementById("siteName");
-    const urlInput = document.getElementById("siteUrl");
-
-    try {
-      this.validateInput(nameInput.value.trim(), urlInput.value.trim());
-      this.addSite({
-        name: nameInput.value.trim(),
-        url: this.normalizeUrl(urlInput.value.trim()),
-      });
-      nameInput.value = "";
-      urlInput.value = "";
-    } catch (error) {
-      alert(error.message);
-      error.target.focus();
-    }
-  }
-
-  validateInput(name, url) {
-    if (!name) throw new Error("请输入站点名称", { target: document.getElementById("siteName") });
-    try {
-      new URL(this.normalizeUrl(url));
-    } catch {
-      throw new Error("请输入有效的URL地址", { target: document.getElementById("siteUrl") });
-    }
-  }
-
-  normalizeUrl(url) {
-    if (!url) return "";
-    if (url.startsWith("http://") || url.startsWith("https://")) {
-      return url;
-    }
-    return `https://${url}`;
-  }
-
-  addSite(site) {
-    this.sites.push({
-      ...site,
-      history: [],
-      status: "unknown",
-      lastUpdated: null,
-    });
-    this.saveToStorage();
-    this.renderSiteList();
-  }
-
-  // 渲染站点列表
-  renderSiteList() {
-    const container = document.getElementById("siteList");
-    container.innerHTML = this.sites
-      .map((site, index) => this.createSiteElement(site, index))
-      .join("");
-  }
-
-  createSiteElement(site, index) {
-    const lastResult = site.history[site.history.length - 1];
-    const latencyDisplay = site.status === "online" ? `${lastResult?.latency ?? "-"}ms` : '<span class="text-red-600">离线</span>';
-
-    return `
-      <div class="flex items-center justify-between p-3 border rounded hover:bg-gray-50 transition-colors">
-        <div class="flex-1 min-w-0">
-          <div class="font-medium truncate">${site.name}</div>
-          <div class="text-sm text-gray-500 truncate">${site.url}</div>
-        </div>
-        <div class="flex items-center gap-4 ml-4">
-          <div class="w-20 text-right">${latencyDisplay}</div>
-          <button onclick="pingMonitor.editSite(${index})" class="text-gray-400 hover:text-blue-500 transition-colors" title="编辑">✎</button>
-          <button onclick="pingMonitor.deleteSite(${index})" class="text-gray-400 hover:text-red-500 transition-colors" title="删除">×</button>
-        </div>
-      </div>
-    `;
-  }
-
-  // 删除站点
-  deleteSite(index) {
-    if (confirm("确定要删除此监控项吗？")) {
-      this.sites.splice(index, 1);
-      this.saveToStorage();
-      this.renderSiteList();
-    }
-  }
-
-  // 编辑站点
-  editSite(index) {
-    const site = this.sites[index];
-    const newName = prompt("请输入新的站点名称", site.name);
-    const newUrl = prompt("请输入新的站点 URL", site.url);
-
-    if (newName && newUrl) {
-      this.sites[index].name = newName;
-      this.sites[index].url = this.normalizeUrl(newUrl);
-      this.saveToStorage();
-      this.renderSiteList();
-    }
-  }
-
-  // 测试所有站点
-  async testAllSites() {
-    const results = await Promise.all(
-      this.sites.map(async (site, index) => {
-        const latency = await this.testSite(site);
-        this.updateSiteStatus(index, latency);
-      })
-    );
-    this.saveToStorage();
-    this.renderSiteList();
-  }
-
-  // 测试单个站点
-  async testSite(site) {
-    const start = performance.now();
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000); // 超时 3 秒
-
-      await fetch(site.url, {
-        mode: "no-cors",
-        signal: controller.signal,
-        cache: "no-store",
-      });
-
-      clearTimeout(timeout);
-      return Math.round(performance.now() - start); // 返回延迟时间
-    } catch (error) {
-      return null; // 测试失败
-    }
-  }
-
-  // 更新站点状态
-  updateSiteStatus(index, latency) {
-    const site = this.sites[index];
-    site.status = latency !== null ? "online" : "offline";
-    site.lastUpdated = new Date().toISOString();
-    site.history.push({
-      timestamp: new Date().toISOString(),
-      latency,
-    });
-    if (site.history.length > 20) {
-      site.history.shift();
-    }
-  }
-
-  // 延迟函数
-  delay(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  // 启动测试循环
-  async startTestingLoop() {
-    while (this.testingActive) {
-      await this.testAllSites();
-      this.updateStatistics();
-      this.updateChart();
-      await this.delay(15000); // 每 15 秒测试一次
-    }
-  }
-
-  // 更新统计信息
-  updateStatistics() {
-    const validLatencies = this.sites
-      .filter((site) => site.status === "online")
-      .flatMap((site) => site.history)
-      .filter((record) => record.latency !== null)
-      .map((record) => record.latency);
-
-    const onlineCount = this.sites.filter((site) => site.status === "online").length;
-    const offlineCount = this.sites.filter((site) => site.status === "offline").length;
-    const avgLatency = validLatencies.length > 0 ? Math.round(validLatencies.reduce((a, b) => a + b, 0) / validLatencies.length) : "-";
-
-    document.getElementById("onlineCount").textContent = onlineCount;
-    document.getElementById("offlineCount").textContent = offlineCount;
-    document.getElementById("avgLatency").textContent = avgLatency === "-" ? avgLatency : `${avgLatency}ms`;
-  }
-
-  // 图表管理
-  setupChart() {
-    const ctx = document.getElementById("latencyChart").getContext("2d");
-    this.chartInstance = new Chart(ctx, {
-      type: this.chartType,
-      data: {
-        labels: Array.from({ length: 20 }, //(_, i) => i + 1
-        ),
-        datasets: [
-          {
-            label: "平均延迟",
-            data: Array(20).fill(null),
-            borderColor: "#3b82f6",
-            backgroundColor: "rgba(59, 130, 246, 0.1)",
-            fill: true,
-            tension: 0.3,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: true,
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: { display: true, text: "延迟 (ms)" },
-          },
-          x: {
-            title: { display: true, text: "时间 (最近测试)" },
-          },
-        },
-      },
-    });
-  }
-
-  updateChart() {
-    const labels = Array.from({ length: 20 }, (_, i) => i + 1);
-    const averageData = labels.map((_, index) => {
-      const sum = this.sites
-        .flatMap((site) => site.history.slice(-20)[index]?.latency)
-        .filter((latency) => typeof latency === "number")
-        .reduce((a, b) => a + b, 0);
-      const count = this.sites
-        .flatMap((site) => site.history.slice(-20)[index]?.latency)
-        .filter((latency) => typeof latency === "number").length;
-      return count > 0 ? Math.round(sum / count) : null;
-    });
-
-    this.chartInstance.data.labels = labels;
-    this.chartInstance.data.datasets[0].data = averageData;
-    this.chartInstance.update();
-  }
-
-  toggleChartType() {
-    this.chartType = this.chartType === "line" ? "bar" : "line";
-    this.chartInstance.destroy();
-    this.setupChart();
-    this.updateChart();
-  }
-
-  // 渲染延迟趋势表格
-  renderLatencyTable() {
-    const tableBody = document.getElementById("latencyTableBody");
-    tableBody.innerHTML = this.sites
-      .flatMap((site) =>
-        site.history.map((record) => ({
-          name: site.name,
-          timestamp: record.timestamp,
-          latency: record.latency,
-        }))
-      )
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) // 按时间倒序
-      .slice(0, 10) // 默认显示最近的 10 条记录
-      .map(
-        (record) => `
-        <tr>
-          <td class="p-2">${new Date(record.timestamp).toLocaleTimeString()}</td>
-          <td class="p-2">${record.name}</td>
-          <td class="p-2">${record.latency || "离线"}</td>
-        </tr>
-      `
-      )
-      .join("");
-  }
-
-  // 切换显示详细数据
-  toggleDetails() {
-    const tableBody = document.getElementById("latencyTableBody");
-    const toggleBtn = document.getElementById("toggleDetailsBtn");
-
-    if (toggleBtn.textContent === "显示更多") {
-      tableBody.innerHTML = this.sites
-        .flatMap((site) =>
-          site.history.map((record) => ({
-            name: site.name,
-            timestamp: record.timestamp,
-            latency: record.latency,
-          }))
-        )
-        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-        .map(
-          (record) => `
-          <tr>
-            <td class="p-2">${new Date(record.timestamp).toLocaleTimeString()}</td>
-            <td class="p-2">${record.name}</td>
-            <td class="p-2">${record.latency || "离线"}</td>
-          </tr>
-        `
-        )
-        .join("");
-      toggleBtn.textContent = "收起";
-    } else {
-      this.renderLatencyTable(); // 还原默认显示
-      toggleBtn.textContent = "显示更多";
-    }
-  }
-
-  // 导出配置
-  exportConfig() {
-    const dataStr = JSON.stringify({
-      version: 1,
-      timestamp: new Date().toISOString(),
-      sites: this.sites,
-    });
-
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ping-config_${new Date().toISOString()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  // 导入配置
-  async handleFileImport(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    try {
-      const content = await file.text();
-      const config = JSON.parse(content);
-
-      if (!config || !Array.isArray(config.sites)) {
-        throw new Error("配置文件格式错误");
-      }
-
-      const validatedSites = config.sites.filter((site) => this.validateSite(site));
-      this.sites = validatedSites;
-      this.saveToStorage();
-      this.renderSiteList();
-      alert("导入成功！");
-    } catch (error) {
-      alert(`导入失败: ${error.message}`);
-    } finally {
-      event.target.value = ""; // 清空文件输入
-    }
-  }
-
-  // 验证站点格式
-  validateSite(site) {
-    return (
-      typeof site.name === "string" &&
-      typeof site.url === "string" &&
-      site.name.trim() !== "" &&
-      site.url.trim() !== ""
-    );
-  }
-
-  // 检查更新
-  async checkForUpdates() {
-    try {
-      const response = await fetch(this.githubRepo);
-      const data = await response.json();
-      const latestVersion = data.tag_name.replace("v", "");
-
-      if (latestVersion > this.version) {
-        const shouldUpdate = confirm(`发现新版本 ${latestVersion}，是否更新？`);
-        if (shouldUpdate) {
-          window.location.href = data.html_url; // 跳转到 GitHub 发布页面
-        }
-      }
-    } catch (error) {
-      console.error("检查更新失败:", error);
-    }
-  }
-
-  // 从 URL 加载站点列表
-  async loadSitesFromURL(url) {
-    try {
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (Array.isArray(data)) {
-        this.sites = data.map((site) => ({
-          name: site.name || "未命名站点",
-          url: this.normalizeUrl(site.url),
-          history: [],
-          status: "unknown",
-        }));
-        this.saveToStorage();
-        this.renderSiteList();
-        alert("站点列表加载成功！");
-      } else {
-        throw new Error("无效的站点列表格式");
-      }
-    } catch (error) {
-      alert(`加载站点列表失败: ${error.message}`);
-    }
-  }
-}
-
-// 初始化应用
-const pingMonitor = new PingMonitor();
-
+}).mount('#app');

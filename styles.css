@@ -1,42 +1,93 @@
-/* 自定义样式 */
+/* 高斯模糊背景 */
+.fixed.inset-0.bg-gray-900/50.backdrop-blur-sm {
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px); /* 兼容 Safari */
+}
+
+/* 导航栏高斯模糊效果 */
+nav.fixed.top-0.left-0.w-full {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px); /* 兼容 Safari */
+  background-color: rgba(255, 255, 255, 0.8); /* 浅色模式背景 */
+}
+
+.dark nav.fixed.top-0.left-0.w-full {
+  background-color: rgba(31, 41, 55, 0.8); /* 深色模式背景 */
+  border-bottom: 1px solid rgba(55, 65, 81, 0.7); /* 深色模式边框 */
+}
+
+/* 内容区域高斯模糊效果 */
+.bg-white/80, .dark.bg-gray-800/80 {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px); /* 兼容 Safari */
+}
+
+/* 表格表头高斯模糊效果 */
+#latencyTable th {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px); /* 兼容 Safari */
+  background-color: rgba(249, 250, 251, 0.8); /* 浅色模式背景 */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.dark #latencyTable th {
+  background-color: rgba(55, 65, 81, 0.8); /* 深色模式背景 */
+}
+
+/* 表格表头的阴影分隔 */
+#latencyTable th {
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dark #latencyTable th {
+  box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* 表格行的样式 */
 #latencyTableBody tr:nth-child(even) {
-    background-color: #f9fafb;
-  }
-  
-  #latencyTableBody tr:hover {
-    background-color: #f3f4f6;
-  }
-  
-  #latencyTable {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  
-  #latencyTable th,
-  #latencyTable td {
-    padding: 8px;
-    text-align: left;
-  }
-  
-  #latencyTable th {
-    background-color: #f3f4f6;
-    font-weight: 600;
-  }
-  #latencyTableContainer {
-    max-height: 400px; 
-    overflow-y: auto;
-  }
-  /* src/styles.css */
-#latencyTableContainer {
-    max-height: 400px !important; /* 使用!important确保覆盖 */
-    overflow-y: block;
-    display: block;
-  }
-  
-  #latencyTable th {
-    position: sticky;
-    top: 0;
-    background-color: #f9fafb;
-    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); /* 添加阴影分隔 */
-  }  
-  
+  background-color: #f9fafb;
+}
+
+.dark #latencyTableBody tr:nth-child(even) {
+  background-color: rgba(55, 65, 81, 0.1);
+}
+
+#latencyTableBody tr:hover {
+  background-color: #f3f4f6;
+}
+
+.dark #latencyTableBody tr:hover {
+  background-color: rgba(55, 65, 81, 0.2);
+}
+
+/* 表格滚动条样式 */
+.scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dark .scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+}
+
+.dark .scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.dark .scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.5);
+}

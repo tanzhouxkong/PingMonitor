@@ -1,77 +1,150 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" :class="{ 'dark': darkMode }">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PingMonitor - 网络监控工具</title>
-  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    /* 自定义样式 */
-    #latencyTableContainer {
-      max-height: 400px;
-      overflow-y: auto;
-    }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PingMonitor - 网络监控工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js/dist/chart.umd.js"></script>
+    <style>
+        /* 高斯模糊背景 */
+        .glassmorphism-bg {
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px); /* 兼容 Safari */
+            background-color: rgba(17, 24, 39, 0.5); /* 暗色半透明背景 */
+        }
 
-    #latencyTable th {
-      position: sticky;
-      top: 0;
-      background-color: #f9fafb;
-      z-index: 1;
-    }
-  </style>
+        /* 导航栏高斯模糊效果 */
+        nav.blurred-nav {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px); /* 兼容 Safari */
+            background-color: rgba(255, 255, 255, 0.8); /* 浅色模式背景 */
+        }
+
+        .dark nav.blurred-nav {
+            background-color: rgba(31, 41, 55, 0.8); /* 深色模式背景 */
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7); /* 深色模式边框 */
+        }
+
+        /* 编辑窗口高斯模糊效果 */
+        .edit-modal {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px); /* 兼容 Safari */
+            background-color: rgba(255, 255, 255, 0.9); /* 浅色模式背景 */
+        }
+
+        .dark .edit-modal {
+            background-color: rgba(31, 41, 55, 0.9); /* 深色模式背景 */
+        }
+    </style>
 </head>
-<body class="bg-gray-100 p-6">
-  <div class="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
-    <h1 class="text-3xl font-bold mb-6">PingMonitor - 网络监控工具</h1>
-    <!-- 添加站点表单 -->
-    <div class="mb-6">
-      <input type="text" id="siteName" placeholder="站点名称" class="p-2 border rounded">
-      <input type="text" id="siteUrl" placeholder="站点 URL" class="p-2 border rounded ml-2">
-      <button id="addSiteBtn" class="bg-blue-500 text-white px-4 py-2 rounded ml-2">添加站点</button>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-500">
+    <!-- 高斯模糊背景 -->
+    <div class="glassmorphism-bg fixed inset-0 z-0"></div>
+
+    <!-- 导航栏 -->
+    <nav class="blurred-nav fixed top-0 left-0 w-full z-20">
+        <div class="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
+            <h1 class="text-xl font-bold text-blue-600 dark:text-blue-400">PingMonitor</h1>
+            <button @click="toggleDarkMode" class="p-2 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                <span v-if="!darkMode">🌞</span>
+                <span v-if="darkMode">🌙</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- 内容区域 -->
+    <div id="app" class="max-w-4xl mx-auto p-6 pt-20 relative" v-cloak>
+        <div class="bg-white/80 dark:bg-gray-800/80 p-8 rounded-lg shadow-lg backdrop-blur-md">
+            <!-- 添加站点 -->
+            <div class="mb-6">
+                <input v-model="newSiteName" type="text" placeholder="站点名称" class="p-2 border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input v-model="newSiteUrl" type="text" placeholder="站点 URL" class="p-2 border rounded ml-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <button @click="addSite" class="bg-blue-500 text-white px-4 py-2 rounded ml-2 hover:bg-blue-600 transition-colors">添加站点</button>
+            </div>
+
+            <!-- 站点列表 -->
+            <div class="space-y-3">
+                <div v-for="(site, index) in sites" :key="index" class="flex items-center justify-between p-3 border rounded dark:border-gray-600 hover:shadow transition-colors bg-white/90 dark:bg-gray-700/90">
+                    <div class="flex-1 min-w-0">
+                        <div class="font-medium truncate text-gray-800 dark:text-gray-100">{{ site.name }}</div>
+                        <div class="text-sm text-gray-500 truncate dark:text-gray-400">{{ site.url }}</div>
+                    </div>
+                    <div class="flex items-center gap-4 ml-4">
+                        <div class="w-20 text-right">
+                            <span v-if="site.status === 'online'" class="text-green-600 dark:text-green-400">{{ site.history[site.history.length - 1]?.latency }}ms</span>
+                            <span v-else class="text-red-600 dark:text-red-400">离线</span>
+                        </div>
+                        <button @click="openEditModal(index)" class="text-gray-400 hover:text-blue-500 transition-colors dark:hover:text-blue-300">✎</button>
+                        <button @click="deleteSite(index)" class="text-gray-400 hover:text-red-500 transition-colors dark:hover:text-red-300">×</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 统计信息 -->
+            <div class="mt-6 p-4 bg-gray-50 rounded dark:bg-gray-700">
+                <h2 class="text-xl font-semibold mb-2 text-gray-800 dark:text-gray-100">统计信息</h2>
+                <div class="flex gap-4 text-gray-600 dark:text-gray-300">
+                    <div>在线站点: <span class="font-bold text-blue-600 dark:text-blue-400">{{ onlineCount }}</span></div>
+                    <div>离线站点: <span class="font-bold text-red-600 dark:text-red-400">{{ offlineCount }}</span></div>
+                    <div>平均延迟: <span class="font-bold text-green-600 dark:text-green-400">{{ avgLatency === '-' ? avgLatency : `${avgLatency}ms` }}</span></div>
+                </div>
+            </div>
+
+            <!-- 延迟趋势 -->
+            <div class="border-t pt-4 dark:border-gray-600">
+                <div class="flex items-center gap-2 mb-3">
+                    <h2 class="text-xl font-semibold text-gray-800 dark:text-gray-100">延迟趋势</h2>
+                    <button @click="toggleChartType" class="text-blue-500 text-sm hover:text-blue-600 dark:text-blue-300 dark:hover:text-blue-400 transition-colors">切换视图</button>
+                </div>
+                <canvas id="latencyChart" class="w-full h-48 mb-4"></canvas>
+            </div>
+
+            <!-- 延迟表格 -->
+            <div class="border rounded dark:border-gray-600">
+                <div id="latencyTableContainer" class="max-h-96 overflow-y-auto scrollbar">
+                    <table class="w-full text-sm text-gray-600 dark:text-gray-300">
+                        <thead>
+                            <tr>
+                                <th class="p-2 sticky top-0 z-10">时间</th>
+                                <th class="p-2 sticky top-0 z-10">站点名称</th>
+                                <th class="p-2 sticky top-0 z-10">延迟 (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="(record, index) in latencyRecords" :key="index" class="border-t dark:border-gray-600 hover:bg-gray-50/50 dark:hover:bg-gray-700/50 transition-colors">
+                                <td class="p-2">{{ formatTime(record.timestamp) }}</td>
+                                <td class="p-2">{{ record.name }}</td>
+                                <td class="p-2">{{ record.latency || '离线' }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- 导入/导出 -->
+            <div class="mt-6">
+                <button @click="exportConfig" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors">导出配置</button>
+                <input type="file" id="importFile" class="hidden" accept=".json" @change="handleFileImport">
+                <button @click="$refs.importFile.click()" class="bg-yellow-500 text-white px-4 py-2 rounded ml-2 hover:bg-yellow-600 transition-colors">导入配置</button>
+            </div>
+        </div>
+
+        <!-- 编辑窗口 -->
+        <div v-if="isEditModalOpen" class="fixed inset-0 flex items-center justify-center z-30">
+            <div class="edit-modal p-6 rounded-lg shadow-lg w-96">
+                <h2 class="text-xl font-bold mb-4">编辑站点</h2>
+                <input v-model="newSiteName" type="text" placeholder="站点名称" class="w-full p-2 border rounded mb-3 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <input v-model="newSiteUrl" type="text" placeholder="站点 URL" class="w-full p-2 border rounded mb-3 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <div class="flex justify-end">
+                    <button @click="isEditModalOpen = false" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 transition-colors">取消</button>
+                    <button @click="saveEdit" class="bg-blue-500 text-white px-4 py-2 rounded ml-2 hover:bg-blue-600 transition-colors">保存</button>
+                </div>
+            </div>
+        </div>
     </div>
-    <!-- 站点列表 -->
-    <div id="siteList" class="space-y-3"></div>
-    <!-- 统计信息 -->
-    <div class="mt-6 p-4 bg-gray-50 rounded">
-      <h2 class="text-xl font-semibold mb-2">统计信息</h2>
-      <div class="flex gap-4">
-        <div>在线站点: <span id="onlineCount" class="font-bold">0</span></div>
-        <div>离线站点: <span id="offlineCount" class="font-bold">0</span></div>
-        <div>平均延迟: <span id="avgLatency" class="font-bold">-</span></div>
-      </div>
-    </div>
-    <!-- 延迟趋势 -->
-    <div class="border-t pt-4">
-      <div class="flex items-center gap-2 mb-3">
-        <h2 class="text-xl font-semibold">延迟趋势</h2>
-        <button id="toggleChartBtn" class="text-blue-500 text-sm">切换视图</button>
-      </div>
-      <canvas id="latencyChart" class="w-full h-48 mb-4"></canvas>
-      <!-- 延迟表格 -->
-      <div id="latencyTableContainer" class="border rounded">
-        <table id="latencyTable" class="w-full text-sm">
-          <thead>
-            <tr>
-              <th class="p-2">时间</th>
-              <th class="p-2">站点名称</th>
-              <th class="p-2">延迟 (ms)</th>
-            </tr>
-          </thead>
-          <tbody id="latencyTableBody"></tbody>
-        </table>
-      </div>
-      <div class="mt-2 text-right">
-        <button id="toggleDetailsBtn" class="text-blue-500 text-sm">显示更多</button>
-      </div>
-    </div>
-    <!-- 导入/导出 -->
-    <div class="mt-6">
-      <button id="exportBtn" class="bg-green-500 text-white px-4 py-2 rounded">导出配置</button>
-      <input type="file" id="importFile" class="hidden" accept=".json">
-      <button id="importBtn" class="bg-yellow-500 text-white px-4 py-2 rounded ml-2">导入配置</button>
-    </div>
-  </div>
-  <script src="/app.js"></script>
+
+    <script src="app.js"></script>
 </body>
 </html>
